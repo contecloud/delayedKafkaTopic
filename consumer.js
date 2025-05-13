@@ -7,40 +7,52 @@ const kafka = new Kafka({
 })
 
 const topic = 'topic-test'
+const delayedTopic = 'delayed-topic'
 const consumer = kafka.consumer({ groupId: 'test-group' })
+const consumerDelayed = kafka.consumer({ groupId: 'delayed-group' })
 const producer = kafka.producer({ createPartitioner: Partitioners.DefaultPartitioner })
 
-const sendMessage = (message, partition, consumer) => {
-    console.log("Enviando novamente para a fila");
-
-    return producer.send({
+const sendMessage = async (message, topic) => {
+    console.log(`Enviando para a fila ${topic}`);
+    await producer.connect()
+    await producer.send({
         topic,
         messages: [
             { value: message }
         ]
     })
-
-    consumer.commitOffsets([
-        { topic: 'topic-test', partition, offset: message.offset }
-    ])
+    await producer.disconnect()
 }
 
-const run = async () => {
+const runPrincipalTopic = async () => {
     await consumer.connect()
     await consumer.subscribe({ topic, fromBeginning: true })
     await consumer.run({
-        autoCommit: false,
         eachMessage: async ({ topic, partition, message }) => {
             const jsonMessage = JSON.parse(message.value.toString())
             console.log(new Date(), jsonMessage)
             if (jsonMessage.valor <= 3) {
                 jsonMessage.valor++
                 const message = JSON.stringify(jsonMessage)
-                await producer.connect()
-                setTimeout(sendMessage(message, partition, consumer), 5000)
+                sendMessage(message, delayedTopic)
             }
         },
     })
 }
 
-run().catch(e => console.error(`[example/consumer] ${e.message}`, e))
+const runDelayedTopic = async () => {
+    await consumerDelayed.connect()
+    await consumerDelayed.subscribe({ topic: delayedTopic, fromBeginning: true })
+    await consumerDelayed.run({
+        eachBatch: async ({ batch }) => {
+            consumerDelayed.pause([{ topic: delayedTopic }])
+            batch.messages.forEach((message) => {
+                sendMessage(message.value, topic)
+            })
+            setTimeout(() => consumerDelayed.resume([{ topic: delayedTopic }]), 5000);
+        },
+    })
+}
+
+runPrincipalTopic().catch(e => console.error(`[example/consumer] ${e.message}`, e))
+runDelayedTopic().catch(e => console.error(`[example/consumer] ${e.message}`, e))

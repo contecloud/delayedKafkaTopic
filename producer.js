@@ -21,7 +21,7 @@ const run = async (mensagem) => {
   await producer.disconnect()
 }
 
-for (let i = 1; i < 30; i++) {
+for (let i = 1; i < 5; i++) {
   setTimeout(() => {
     const mensagem = JSON.stringify({ mensagem: i, valor: 1 });
     run(mensagem).catch(e => console.error(`[example/consumer] ${e.message}`, e))
